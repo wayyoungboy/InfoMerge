@@ -81,7 +81,7 @@ def search_fulltext(query: str, channel: str | None = None, n_results: int = 20)
     """Full-text keyword search."""
     collection = get_collection()
     where = {"channel": channel} if channel else None
-    result = collection.query(where_document={"$contains": query}, n_results=n_results, where=where)
+    result = collection.query(query_texts=[query], where_document={"$contains": query}, n_results=n_results, where=where)
     return _format_results(result)
 
 
@@ -103,7 +103,7 @@ def get_message_by_id(doc_id: str) -> dict | None:
     """Get a single message by document ID."""
     collection = get_collection()
     result = collection.get(ids=[doc_id])
-    if not result["ids"] or not result["ids"][0]:
+    if not result.get("ids"):
         return None
     return _format_single(result)
 
@@ -111,41 +111,68 @@ def get_message_by_id(doc_id: str) -> dict | None:
 def get_message_count(channel: str | None = None) -> int:
     """Get total message count, optionally filtered by channel."""
     collection = get_collection()
+    if channel:
+        # pyseekdb embedded doesn't support where filter in queries; get all and filter
+        result = collection.get()
+        metadatas = result.get("metadatas", [])
+        return sum(1 for m in metadatas if isinstance(m, dict) and m.get("channel") == channel)
     return collection.count()
 
 
 def _format_results(result: dict) -> list[dict]:
     """Format pyseekdb query result to API response format."""
     items = []
-    if not result["ids"] or not result["ids"][0]:
+    if not result.get("ids"):
         return items
 
-    for i, doc_id in enumerate(result["ids"][0]):
-        meta = result["metadatas"][0][i] if result.get("metadatas") else {}
-        distance = result["distances"][0][i] if result.get("distances") and result["distances"][0] else None
+    # pyseekdb query() returns nested lists, hybrid_search() returns flat lists
+    ids = result["ids"]
+    is_flat = ids and isinstance(ids[0], str)
+
+    id_list = ids[0] if not is_flat else ids
+    doc_list = (result.get("documents") or [[]])[0] if not is_flat else (result.get("documents") or [])
+    meta_list = (result.get("metadatas") or [[]])[0] if not is_flat else (result.get("metadatas") or [])
+    dist_list = (result.get("distances") or [[]])[0] if not is_flat else (result.get("distances") or [])
+
+    for i, doc_id in enumerate(id_list):
+        meta = meta_list[i] if i < len(meta_list) else {}
+        distance = dist_list[i] if i < len(dist_list) else None
         items.append({
             "id": doc_id,
             "channel": meta.get("channel", ""),
             "title": meta.get("title", ""),
-            "content": result["documents"][0][i] if result.get("documents") else "",
+            "content": doc_list[i] if i < len(doc_list) else "",
             "author": meta.get("author", ""),
             "url": meta.get("url", ""),
             "published_at": meta.get("published_at", ""),
-            "score": round(1.0 - distance, 4) if distance is not None else None,
+            "score": round(1.0 - float(distance), 4) if distance is not None else None,
         })
     return items
 
 
 def _format_single(result: dict) -> dict:
     """Format single message result."""
-    if not result["ids"] or not result["ids"][0]:
+    ids = result.get("ids")
+    if not ids:
         return {}
-    meta = result["metadatas"][0][0] if result.get("metadatas") else {}
+
+    # collection.get() returns flat arrays, not nested
+    is_flat = ids and isinstance(ids[0], str)
+
+    if is_flat:
+        doc_id = ids[0] if ids else ""
+        meta = (result.get("metadatas") or [{}])[0]
+        content = (result.get("documents") or [""])[0]
+    else:
+        doc_id = ids[0][0] if ids[0] else ""
+        meta = (result.get("metadatas") or [[]])[0][0]
+        content = (result.get("documents") or [[]])[0][0]
+
     return {
-        "id": result["ids"][0][0],
+        "id": doc_id,
         "channel": meta.get("channel", ""),
         "title": meta.get("title", ""),
-        "content": result["documents"][0][0] if result.get("documents") else "",
+        "content": content,
         "author": meta.get("author", ""),
         "url": meta.get("url", ""),
         "published_at": meta.get("published_at", ""),
