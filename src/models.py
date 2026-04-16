@@ -73,3 +73,39 @@ class HybridSearchRequest(BaseModel):
     keywords: Optional[str] = None
     channel: Optional[str] = None
     top_k: int = 20
+
+
+class VitalityResult(BaseModel):
+    industry: str
+    total_score: float
+    activity_score: float
+    sentiment_score: float
+    diversity_score: float
+    trend_score: float
+    analyzed_at: str
+    period_start: str
+    period_end: str
+    message_count: int
+
+
+class VitalityAnalyzeRequest(BaseModel):
+    industry: str = Field(..., description="Industry keyword")
+    period_days: int = Field(default=7, ge=1, le=90)
+    max_messages: int = Field(default=100, ge=1, le=1000)
+
+
+class VitalityListResponse(BaseModel):
+    industries: list[VitalityResult]
+
+
+class PaperResult(BaseModel):
+    title: str
+    authors: str
+    abstract: str
+    url: str
+    published_at: str
+
+
+class VitalityHistoryResponse(BaseModel):
+    industry: str
+    results: list[VitalityResult]
