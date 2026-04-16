@@ -36,6 +36,41 @@ export interface FetchResponse {
   error: string | null;
 }
 
+export interface VitalityResult {
+  industry: string;
+  total_score: number;
+  activity_score: number;
+  sentiment_score: number;
+  diversity_score: number;
+  trend_score: number;
+  analyzed_at: string;
+  period_start: string;
+  period_end: string;
+  message_count: number;
+}
+
+export interface VitalityListResponse {
+  industries: VitalityResult[];
+}
+
+export interface VitalityHistoryResponse {
+  industry: string;
+  results: VitalityResult[];
+}
+
+export interface PaperResult {
+  title: string;
+  authors: string;
+  abstract: string;
+  url: string;
+  published_at: string;
+}
+
+export interface PaperResponse {
+  papers: PaperResult[];
+  industry: string;
+}
+
 export async function semanticSearch(query: string, channel?: string, topK = 20): Promise<SearchResponse> {
   const res = await fetch(`${API_BASE}/search/semantic`, {
     method: 'POST',
@@ -77,5 +112,40 @@ export async function registerChannel(name: string, settings: Record<string, unk
 
 export async function getChannelSchema(name: string): Promise<Record<string, unknown>> {
   const res = await fetch(`${API_BASE}/channels/${name}/schema`);
+  return res.json();
+}
+
+export async function analyzeVitality(
+  industry: string,
+  periodDays = 7,
+  maxMessages = 100
+): Promise<VitalityResult | { error: string }> {
+  const res = await fetch(`${API_BASE}/vitality/analyze`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ industry, period_days: periodDays, max_messages: maxMessages }),
+  });
+  return res.json();
+}
+
+export async function listVitalality(): Promise<VitalityListResponse> {
+  const res = await fetch(`${API_BASE}/vitality/list`);
+  return res.json();
+}
+
+export async function getVitalityHistory(industry: string): Promise<VitalityHistoryResponse> {
+  const res = await fetch(`${API_BASE}/vitality/history/${industry}`);
+  return res.json();
+}
+
+export async function searchPapers(industry: string): Promise<PaperResponse> {
+  const res = await fetch(`${API_BASE}/vitality/papers/${industry}`);
+  return res.json();
+}
+
+export async function discoverIndustries(): Promise<{ industries: Array<{ industry: string; message_count: number }> }> {
+  const res = await fetch(`${API_BASE}/vitality/discover`, {
+    method: 'POST',
+  });
   return res.json();
 }
